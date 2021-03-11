@@ -23,6 +23,10 @@ class Human(pydantic.BaseModel):
     birth_date: datetime.datetime
     pets: typing.List[Pet] = []
 
+class NestedListModel(pydantic.BaseModel):
+    nested_list: typing.List[typing.Optional[typing.List[typing.Optional[int]]]]
+    super_nested_list: typing.List[typing.List[typing.List[typing.List[int]]]]
+
 
 class TestConvertingComplexModels:
     def test_returns_object_type_schema(self, normalize_sdl):
@@ -93,6 +97,16 @@ class TestConvertingComplexModels:
                 DOG
                 CAT
                 OTHER
+            }
+        """
+        assert normalize_sdl(value) == normalize_sdl(expected_value)
+
+    def test_returns_object_type_schema_with_nested_lists(self, normalize_sdl):
+        value = pydantic2graphene.to_graphene(NestedListModel)
+        expected_value = """
+            type NestedListModelGql {
+                nestedList: [[Int]!]!
+                superNestedList: [[[[Int!]!]!]!]!
             }
         """
         assert normalize_sdl(value) == normalize_sdl(expected_value)

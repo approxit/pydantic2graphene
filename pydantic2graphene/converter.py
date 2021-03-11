@@ -101,62 +101,64 @@ class ToGraphene:
 
         return f"{_name}Gql"
 
-    def _convert_to_graphene_field(
-        self, pydantic_field: pydantic.fields.ModelField
-    ):
-        shape = pydantic_field.shape
-        if fields.is_not_supported_shape(shape):
-            raise errors.FieldNotSupported(pydantic_field.name)
+    def _convert_to_graphene_field(self, field_name: str, field_type):
+        is_optional = False
 
-        type_ = pydantic_field.type_
-        type_args = getattr(type_, "__args__", [])
+        if fields.is_optional_type(field_type):
+            field_type = field_type.__args__[0]
+            is_optional = True
 
-        if fields.is_list_shape(shape) and len(type_args):
-            type_ = type_args[0]
-            if len(type_args) > 1:
-                logging.warn(
-                    "%s, has multiple only the first type was used",
-                    pydantic_field.name,
-                )
+        if fields.is_list_type(field_type):
+            nested_field_type = field_type.__args__[0]
 
-        if fields.is_enum_type(type_):
-            cache_key, cached_obj = self._get_from_cache(type_, graphene.Enum)
+            field = self._convert_to_graphene_field(field_name, nested_field_type)
+
+            if not is_optional:
+                field = graphene.NonNull(field)
+
+            return graphene.List(field)
+
+        if fields.is_enum_type(field_type):
+            cache_key, cached_obj = self._get_from_cache(field_type, graphene.Enum)
             if cached_obj:
                 return cached_obj
 
-            graphene_enum = graphene.Enum.from_enum(type_)
+            graphene_enum = graphene.Enum.from_enum(field_type)
             self._cache[cache_key] = graphene_enum
             return graphene_enum
 
-        if fields.is_pydantic_base_model(type_):
+        if fields.is_pydantic_base_model(field_type):
             obj_type = self.graphene_type if self.graphene_type == graphene.InputObjectType else graphene.ObjectType
-            return ToGraphene(type_, obj_type).convert()
+            return ToGraphene(field_type, obj_type).convert()
 
-        field = fields.get_grapehene_field_by_type(type_)
+        field = fields.get_grapehene_field_by_type(field_type)
         if field:
             return field
 
-        if fields.is_field_not_allowed_type(type_):
+        if fields.is_field_not_allowed_type(field_type):
             raise errors.InvalidListType(
                 "Lists must be type, e.g typing.List[int]"
             )
 
-        outer_type_ = getattr(pydantic_field, "outer_type_", None)
-        if outer_type_:
-            field_outer = fields.get_grapehene_field_by_type(outer_type_)
-            if field_outer:
-                return field_outer
 
     def _get_graphene_field(self, pydantic_field: pydantic.fields.ModelField):
+        if fields.is_not_supported_shape(pydantic_field.shape):
+            raise errors.FieldNotSupported(pydantic_field.name)
+
         args = {
             "required": pydantic_field.required,
             "default_value": pydantic_field.default,
         }
-        field = self._convert_to_graphene_field(pydantic_field)
+
+        field = self._convert_to_graphene_field(pydantic_field.name, pydantic_field.type_)
+
+        if not field:
+            field = self._convert_to_graphene_field(pydantic_field.name, pydantic_field.outer_type_)
+
         if not field:
             raise errors.FieldNotSupported(pydantic_field.name)
 
-        if fields.is_list_shape(pydantic_field.shape):
+        if fields.is_list_shape(pydantic_field.shape) and not fields.is_tuple_shape(pydantic_field.shape):
             if pydantic_field.required:
                 return graphene.List(graphene.NonNull(field), **args)
             return graphene.List(field, **args)

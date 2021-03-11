@@ -41,6 +41,22 @@ def _get_list_shapes():
     return _LIST_SHAPES
 
 
+_TUPLE_TUPLE_SHAPES = None
+
+
+def _get_tuple_shapes():
+    global _TUPLE_TUPLE_SHAPES
+    if _TUPLE_TUPLE_SHAPES:
+        return _TUPLE_TUPLE_SHAPES
+
+    _TUPLE_TUPLE_SHAPES = {
+        pydantic.fields.SHAPE_TUPLE,
+        pydantic.fields.SHAPE_TUPLE_ELLIPSIS,
+    }
+
+    return _TUPLE_TUPLE_SHAPES
+
+
 _TYPE_MAPPING = None
 
 
@@ -165,8 +181,20 @@ def is_enum_type(type_) -> bool:
     return inspect.isclass(type_) and issubclass(type_, _ENUM_TYPE)
 
 
+def is_list_type(type_) -> bool:
+    return isinstance(type_, typing._GenericAlias) and type_.__origin__ in (list, tuple)
+
+
+def is_optional_type(type_) -> bool:
+    return type_ == typing.Optional[type_]
+
+
 def is_list_shape(shape) -> bool:
     return shape in _get_list_shapes()
+
+
+def is_tuple_shape(shape) -> bool:
+    return shape in _get_tuple_shapes()
 
 
 def is_not_supported_shape(shape) -> bool:
